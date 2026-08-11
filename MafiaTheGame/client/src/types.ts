@@ -33,6 +33,7 @@ export interface GameState {
   // Night actions state
   mafiaVotes: Record<string, string>; // mafiaPlayerId -> targetPlayerId
   doctorVotes: Record<string, string>; // doctorPlayerId -> targetPlayerId
+  lastDoctorSaves: Record<string, string | null>; // doctorPlayerId -> last targetId
   sheriffInvestigate: Record<string, string>; // sheriffId -> targetPlayerId
   
   // Day actions state

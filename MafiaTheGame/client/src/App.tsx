@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { socket } from './socket';
-import type { GameState, Player, Role, GameSettings } from './types';
-import { Users, Crown, Skull, UserCheck, Search, Shield, Target } from 'lucide-react';
+import type { GameState, Role, GameSettings } from './types';
+import { Users, Crown, Skull, Search, Target } from 'lucide-react';
 import './index.css';
 
 function App() {
@@ -65,7 +65,7 @@ function App() {
   }, [gameState?.phase]);
 
   const me = useMemo(() => {
-    if (!gameState) return null;
+    if (!gameState || !socket.id) return null;
     return gameState.players[socket.id] || null;
   }, [gameState]);
 
@@ -348,7 +348,7 @@ function App() {
       targets = targets.filter(p => !mafiaTeammates.includes(p.id));
     }
 
-    const hasLocked = gameState.lockedPlayers[socket.id] || false;
+    const hasLocked = (socket.id && gameState.lockedPlayers[socket.id]) || false;
 
     return (
       <div>
@@ -361,7 +361,7 @@ function App() {
 
         <div className="vote-grid">
           {targets.map(p => {
-            const isSelected = pendingAction === p.id || (myRole === 'mafia' && mafiaVotesState[socket.id] === p.id);
+            const isSelected = pendingAction === p.id || (myRole === 'mafia' && socket.id && mafiaVotesState[socket.id] === p.id);
             const votesForP = myRole === 'mafia' ? Object.values(mafiaVotesState).filter(v => v === p.id).length : 0;
             
             return (
@@ -388,7 +388,7 @@ function App() {
             <button 
               className="primary" 
               onClick={() => socket.emit('lock_vote', { roomId: gameState.roomId })}
-              disabled={!pendingAction && !(myRole === 'mafia' && mafiaVotesState[socket.id])}
+              disabled={!pendingAction && !(myRole === 'mafia' && socket.id && mafiaVotesState[socket.id])}
             >
               Lock In Vote
             </button>
@@ -423,7 +423,7 @@ function App() {
       ? getAllPlayers().filter(p => gameState.forceVoteTargets!.includes(p.id))
       : getAlivePlayers();
 
-    const myVote = gameState.dayVotes[socket.id];
+    const myVote = socket.id ? gameState.dayVotes[socket.id] : undefined;
 
     return (
       <div>

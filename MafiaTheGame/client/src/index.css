@@ -1,0 +1,288 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  --bg-color: #0f1115;
+  --panel-bg: rgba(25, 28, 36, 0.7);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a5b0;
+  
+  --accent-red: #e63946;
+  --accent-red-glow: rgba(230, 57, 70, 0.5);
+  
+  --accent-blue: #457b9d;
+  --accent-blue-glow: rgba(69, 123, 157, 0.5);
+  
+  --accent-green: #2a9d8f;
+  --accent-green-glow: rgba(42, 157, 143, 0.5);
+  
+  --accent-purple: #9d4edd;
+  --accent-purple-glow: rgba(157, 78, 221, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg-color);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(230, 57, 70, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(69, 123, 157, 0.1) 0%, transparent 50%);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100vh;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Typography */
+h1, h2, h3 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-size: 4rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  background: linear-gradient(to right, #fff, var(--text-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+.title-red {
+  color: var(--accent-red);
+  -webkit-text-fill-color: var(--accent-red);
+  text-shadow: 0 0 20px var(--accent-red-glow);
+}
+
+/* Inputs & Buttons */
+input {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent-red);
+  box-shadow: 0 0 15px var(--accent-red-glow);
+}
+
+button {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+button::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: all 0.5s ease;
+}
+
+button:hover::before {
+  left: 100%;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+button.primary {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+button.primary:hover {
+  background: #ff4d5a;
+  box-shadow: 0 5px 20px var(--accent-red-glow);
+}
+
+/* Layouts */
+.flex-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lobby-container {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.players-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.player-card {
+  background: rgba(0,0,0,0.4);
+  padding: 0.75rem 1.5rem;
+  border-radius: 30px;
+  border: 1px solid var(--panel-border);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.player-card.host {
+  border-color: var(--accent-red);
+  box-shadow: 0 0 10px var(--accent-red-glow);
+}
+
+.player-card.dead {
+  opacity: 0.5;
+  text-decoration: line-through;
+  filter: grayscale(1);
+}
+
+.role-reveal {
+  text-align: center;
+  animation: fadeInScale 1s ease forwards;
+}
+
+.role-card {
+  display: inline-block;
+  padding: 3rem;
+  border-radius: 16px;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid var(--panel-border);
+  margin: 2rem 0;
+  font-family: 'Playfair Display', serif;
+}
+
+.role-mafia { border-color: var(--accent-red); color: var(--accent-red); box-shadow: 0 0 30px var(--accent-red-glow); }
+.role-doctor { border-color: var(--accent-green); color: var(--accent-green); box-shadow: 0 0 30px var(--accent-green-glow); }
+.role-sheriff { border-color: var(--accent-blue); color: var(--accent-blue); box-shadow: 0 0 30px var(--accent-blue-glow); }
+.role-jester { border-color: var(--accent-purple); color: var(--accent-purple); box-shadow: 0 0 30px var(--accent-purple-glow); }
+.role-villager { border-color: #fff; color: #fff; box-shadow: 0 0 30px rgba(255,255,255,0.2); }
+
+.timer {
+  font-size: 2.5rem;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  color: var(--accent-red);
+  text-shadow: 0 0 15px var(--accent-red-glow);
+  text-align: center;
+  margin: 1rem 0;
+}
+
+/* Animations */
+@keyframes fadeInScale {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseRed {
+  0% { box-shadow: 0 0 10px var(--accent-red-glow); }
+  50% { box-shadow: 0 0 25px var(--accent-red-glow); }
+  100% { box-shadow: 0 0 10px var(--accent-red-glow); }
+}
+
+.narrator-box {
+  background: rgba(230, 57, 70, 0.1);
+  border-left: 4px solid var(--accent-red);
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem;
+}
+
+/* Voting Grid */
+.vote-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.vote-btn {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border: 2px solid var(--panel-border);
+}
+
+.vote-btn.selected {
+  border-color: var(--accent-red);
+  background: rgba(230, 57, 70, 0.2);
+}
+
+.vote-count {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-top: 0.5rem;
+}

@@ -263,8 +263,9 @@ button.primary:hover {
 
 /* Voting Grid */
 .vote-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 1rem;
   margin-top: 2rem;
 }
@@ -274,6 +275,8 @@ button.primary:hover {
   flex-direction: column;
   padding: 1.5rem;
   border: 2px solid var(--panel-border);
+  flex: 1 1 200px;
+  max-width: 300px;
 }
 
 .vote-btn.selected {

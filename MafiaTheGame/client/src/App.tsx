@@ -220,23 +220,23 @@ function App() {
             <div className="grid-2">
               <div>
                 <label>Mafias: {gameState.settings.numMafia}</label>
-                <input type="range" min="1" max="5" value={gameState.settings.numMafia} onChange={e => updateSettings('numMafia', parseInt(e.target.value))} />
+                <input type="number" min="1" max="5" value={gameState.settings.numMafia} onChange={e => updateSettings('numMafia', parseInt(e.target.value))} />
                 
                 <label>Doctors: {gameState.settings.numDoctors}</label>
-                <input type="range" min="0" max="3" value={gameState.settings.numDoctors} onChange={e => updateSettings('numDoctors', parseInt(e.target.value))} />
+                <input type="number" min="0" max="3" value={gameState.settings.numDoctors} onChange={e => updateSettings('numDoctors', parseInt(e.target.value))} />
                 
                 <label>Sheriffs: {gameState.settings.numSheriffs}</label>
-                <input type="range" min="0" max="3" value={gameState.settings.numSheriffs} onChange={e => updateSettings('numSheriffs', parseInt(e.target.value))} />
+                <input type="number" min="0" max="3" value={gameState.settings.numSheriffs} onChange={e => updateSettings('numSheriffs', parseInt(e.target.value))} />
                 
                 <label>Jesters: {gameState.settings.numJesters}</label>
-                <input type="range" min="0" max="2" value={gameState.settings.numJesters} onChange={e => updateSettings('numJesters', parseInt(e.target.value))} />
+                <input type="number" min="0" max="2" value={gameState.settings.numJesters} onChange={e => updateSettings('numJesters', parseInt(e.target.value))} />
               </div>
               <div>
                 <label>Deliberation Timer (s): {gameState.settings.timers.deliberation}</label>
-                <input type="range" min="30" max="300" step="30" value={gameState.settings.timers.deliberation} onChange={e => updateTimer('deliberation', parseInt(e.target.value))} />
+                <input type="number" min="30" max="300" step="30" value={gameState.settings.timers.deliberation} onChange={e => updateTimer('deliberation', parseInt(e.target.value))} />
                 
                 <label>Voting Timer (s): {gameState.settings.timers.voting}</label>
-                <input type="range" min="15" max="120" step="15" value={gameState.settings.timers.voting} onChange={e => updateTimer('voting', parseInt(e.target.value))} />
+                <input type="number" min="15" max="120" step="15" value={gameState.settings.timers.voting} onChange={e => updateTimer('voting', parseInt(e.target.value))} />
               </div>
             </div>
             
@@ -428,6 +428,17 @@ function App() {
     return (
       <div>
         <h2 className="title-red" style={{textAlign:'center'}}>{isForceVote ? 'TIE BREAKER' : 'Voting Phase'}</h2>
+        
+        {/* Render narrator messages inline so they don't overlap UI on mobile */}
+        {gameState.narratorMessages.length > 0 && (
+          <div style={{ marginBottom: '2rem' }}>
+            {gameState.narratorMessages.slice(-2).map((msg, i) => (
+              <div key={i} className="narrator-box" style={{ animation: 'fadeInScale 0.5s ease', margin: '0 auto', maxWidth: '600px' }}>
+                {msg}
+              </div>
+            ))}
+          </div>
+        )}
         <p style={{textAlign:'center', marginBottom: '2rem'}}>
           {isForceVote ? 'Vote between the tied players.' : 'Vote for who to lynch.'}
         </p>
@@ -438,7 +449,7 @@ function App() {
 
         <div className="vote-grid">
           {targets.map(p => {
-            const votesForP = Object.values(gameState.dayVotes).filter(v => v === p.id).length;
+            const votesForP = Object.values(gameState.dayVotes || {}).filter(v => v === p.id).length;
             const isSelected = myVote === p.id;
             
             return (
@@ -497,18 +508,7 @@ function App() {
         </div>
       )}
 
-      {/* Narrator Messages Box - visible mostly during day or for host updates */}
-      {gameState.narratorMessages.length > 0 && gameState.phase.startsWith('day') && (
-        <div style={{ position: 'absolute', top: '1rem', left: '2rem', maxWidth: '300px' }}>
-          {gameState.narratorMessages.slice(-2).map((msg, i) => (
-            <div key={i} className="narrator-box" style={{ animation: 'fadeInScale 0.5s ease' }}>
-              {msg}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Timer Header */}
+      {/* Host / Name Header */}
       {gameState.phase !== 'lobby' && gameState.phase !== 'game_over' && !gameState.phase.startsWith('night') && (
         <div className="timer">
           {timeLeft}s

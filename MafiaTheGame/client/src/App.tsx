@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { socket } from './socket';
-import type { GameState, Role, GameSettings } from './types';
+import type { GameState, Role, GameSettings, Player } from './types';
 import { Users, Crown, Skull, Search, Target } from 'lucide-react';
 import './index.css';
 

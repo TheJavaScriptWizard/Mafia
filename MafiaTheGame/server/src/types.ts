@@ -9,6 +9,7 @@ export interface Player {
   role: Role | null;
   isAlive: boolean;
   isHost: boolean;
+  connected?: boolean;
 }
 
 export interface GameSettings {

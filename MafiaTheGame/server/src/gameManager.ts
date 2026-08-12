@@ -20,6 +20,7 @@ export function initGameManager(serverIo: Server) {
         role: null,
         isAlive: true,
         isHost: true, // The creator is the host
+        connected: true,
       };
 
       lobbies[roomId] = {
@@ -62,6 +63,7 @@ export function initGameManager(serverIo: Server) {
       if (lobby.players[sessionId]) {
         // Reconnecting existing player
         lobby.players[sessionId].socketId = socket.id;
+        lobby.players[sessionId].connected = true;
         lobby.socketToSession[socket.id] = sessionId;
         socket.join(lobby.roomId);
         
@@ -85,6 +87,7 @@ export function initGameManager(serverIo: Server) {
         role: null,
         isAlive: true,
         isHost: false,
+        connected: true,
       };
 
       lobby.players[sessionId] = newPlayer;
@@ -236,10 +239,47 @@ export function initGameManager(serverIo: Server) {
       }
     });
 
+    socket.on('force_end_game', (data: { roomId: string }) => {
+      const lobby = lobbies[data.roomId];
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && lobby.hostId === sid) {
+        lobby.phase = 'game_over';
+        lobby.phaseEndTime = null;
+        lobby.winner = null;
+        lobby.narratorMessages.push('The host has forcefully ended the game.');
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
+      }
+    });
+
     socket.on('disconnect', () => {
-      // Find which room they were in and remove them (or mark disconnected)
-      // For simplicity, we just log it. A robust app would handle reconnects.
       console.log('Client disconnected:', socket.id);
+      for (const roomId in lobbies) {
+        const lobby = lobbies[roomId];
+        const sid = lobby.socketToSession[socket.id];
+        if (sid) {
+          if (lobby.phase === 'lobby') {
+            delete lobby.players[sid];
+            delete lobby.socketToSession[socket.id];
+            
+            const remainingSids = Object.keys(lobby.players);
+            if (remainingSids.length === 0) {
+              delete lobbies[roomId];
+            } else {
+              if (lobby.hostId === sid) {
+                lobby.hostId = remainingSids[0];
+                lobby.players[lobby.hostId].isHost = true;
+              }
+              io.to(roomId).emit('game_state_update', getSanitizedState(lobby));
+            }
+          } else {
+            if (lobby.players[sid]) {
+              lobby.players[sid].connected = false;
+              io.to(roomId).emit('game_state_update', getSanitizedState(lobby));
+            }
+          }
+          break;
+        }
+      }
     });
   });
 }

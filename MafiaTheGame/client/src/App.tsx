@@ -33,10 +33,6 @@ function App() {
     
     if (savedName) setPlayerName(savedName);
     if (savedRoom) setRoomCodeInput(savedRoom);
-    
-    if (savedName && savedRoom && sid) {
-      socket.emit('join_lobby', { name: savedName, roomId: savedRoom, sessionId: sid });
-    }
   }, []);
 
   useEffect(() => {
@@ -182,6 +178,25 @@ function App() {
             <button type="submit" className="primary">Create New Game</button>
           </form>
 
+          {localStorage.getItem('mafia_roomId') && (
+            <>
+              <div style={{ textAlign: 'center', margin: '1rem 0', color: 'var(--text-secondary)' }}>— OR —</div>
+              <button 
+                type="button" 
+                className="secondary" 
+                style={{ width: '100%', marginBottom: '1rem' }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (playerName && roomCodeInput) {
+                    socket.emit('join_lobby', { name: playerName, roomId: roomCodeInput, sessionId });
+                  }
+                }}
+              >
+                Rejoin Last Game ({localStorage.getItem('mafia_roomId')})
+              </button>
+            </>
+          )}
+
           <div style={{ textAlign: 'center', margin: '1rem 0', color: 'var(--text-secondary)' }}>— OR —</div>
 
           <form onSubmit={handleJoinLobby}>
@@ -232,9 +247,9 @@ function App() {
 
         <div className="players-list">
           {Object.values(gameState.players).map(p => (
-            <div key={p.id} className={`player-card ${p.isHost ? 'host' : ''}`}>
+            <div key={p.id} className={`player-card ${p.isHost ? 'host' : ''}`} style={{ opacity: p.connected === false ? 0.5 : 1 }}>
               {p.isHost && <Crown size={16} color="var(--accent-red)" />}
-              {p.name}
+              {p.name} {p.connected === false ? '(Disconnected)' : ''}
             </div>
           ))}
         </div>
@@ -431,9 +446,9 @@ function App() {
           <p style={{fontSize: '1.2rem', marginBottom: '2rem'}}>Discuss who you think the Mafia is.</p>
           <div className="players-list" style={{justifyContent: 'center'}}>
             {getAllPlayers().map(p => (
-              <div key={p.id} className={`player-card ${!p.isAlive ? 'dead' : ''}`}>
+              <div key={p.id} className={`player-card ${!p.isAlive ? 'dead' : ''}`} style={{ opacity: p.connected === false ? 0.5 : 1 }}>
                 {!p.isAlive && <Skull size={16} />}
-                {p.name}
+                {p.name} {p.connected === false ? '(Disconnected)' : ''}
               </div>
             ))}
           </div>
@@ -490,8 +505,9 @@ function App() {
                 className={`vote-btn ${isSelected ? 'selected' : ''}`} 
                 onClick={() => me?.isAlive && socket.emit('day_vote', { roomId: gameState.roomId, targetId: p.id })}
                 disabled={!me?.isAlive}
+                style={{ opacity: p.connected === false ? 0.5 : 1 }}
               >
-                {p.name}
+                {p.name} {p.connected === false ? '(Disconnected)' : ''}
                 <div className="vote-count">{votesForP} Votes</div>
                 {voters && <div className="voter-names">{voters}</div>}
               </button>
@@ -538,7 +554,25 @@ function App() {
     <div className="flex-center" style={{ padding: '2rem' }}>
       
       {gameState.phase !== 'lobby' && (
-        <div style={{ position: 'absolute', top: '1rem', right: '2rem', display: 'flex', gap: '1rem' }}>
+        <div style={{ position: 'absolute', top: '1rem', right: '2rem', display: 'flex', gap: '1rem', alignItems: 'center', zIndex: 100 }}>
+          {me?.isHost && gameState.phase !== 'game_over' && (
+             <div style={{ display: 'flex', gap: '1rem' }}>
+               <div className="player-card host" style={{ background: 'var(--panel-bg)', backdropFilter: 'blur(10px)' }}>
+                 Room Code: {gameState.roomId}
+               </div>
+               <button 
+                 className="primary" 
+                 style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                 onClick={() => {
+                   if (window.confirm("Are you sure you want to force end the game?")) {
+                     socket.emit('force_end_game', { roomId: gameState.roomId });
+                   }
+                 }}
+               >
+                 Force End Game
+               </button>
+             </div>
+          )}
           {me?.isHost && (
             <div className="player-card host" style={{ background: 'var(--panel-bg)', backdropFilter: 'blur(10px)' }}>
               HOST / NARRATOR

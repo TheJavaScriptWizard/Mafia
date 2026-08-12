@@ -101,7 +101,17 @@ export function initGameManager(serverIo: Server) {
       const lobby = lobbies[data.roomId];
       const sid = lobby?.socketToSession[socket.id];
       if (lobby && lobby.hostId === sid) {
-        lobby.settings = data.settings;
+        const s = data.settings;
+        lobby.settings = {
+          numMafia: Math.min(5, Math.max(1, s.numMafia || 1)),
+          numDoctors: Math.min(3, Math.max(0, s.numDoctors || 0)),
+          numSheriffs: Math.min(3, Math.max(0, s.numSheriffs || 0)),
+          numJesters: Math.min(2, Math.max(0, s.numJesters || 0)),
+          timers: {
+            deliberation: Math.min(300, Math.max(15, s.timers?.deliberation || 120)),
+            voting: Math.min(120, Math.max(15, s.timers?.voting || 60))
+          }
+        };
         io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
       }
     });

@@ -144,17 +144,20 @@ function App() {
 
   const handleCreateLobby = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!playerName) return;
-    localStorage.setItem('mafia_playerName', playerName);
-    socket.emit('create_lobby', { name: playerName, sessionId });
+    const cleanName = playerName.trim();
+    if (!cleanName) return;
+    localStorage.setItem('mafia_playerName', cleanName);
+    socket.emit('create_lobby', { name: cleanName, sessionId });
   };
 
   const handleJoinLobby = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!playerName || !roomCodeInput) return;
-    localStorage.setItem('mafia_playerName', playerName);
-    localStorage.setItem('mafia_roomId', roomCodeInput.toUpperCase());
-    socket.emit('join_lobby', { name: playerName, roomId: roomCodeInput.toUpperCase(), sessionId });
+    const cleanName = playerName.trim();
+    const cleanRoom = roomCodeInput.trim().toUpperCase();
+    if (!cleanName || !cleanRoom) return;
+    localStorage.setItem('mafia_playerName', cleanName);
+    localStorage.setItem('mafia_roomId', cleanRoom);
+    socket.emit('join_lobby', { name: cleanName, roomId: cleanRoom, sessionId });
   };
 
   if (!gameState) {
@@ -388,7 +391,7 @@ function App() {
       targets = targets.filter(p => !mafiaTeammates.includes(p.id));
     }
 
-    const hasLocked = (socket.id && gameState.lockedPlayers[socket.id]) || false;
+    const hasLocked = (sessionId && gameState.lockedPlayers[sessionId]) || false;
 
     return (
       <div>
@@ -401,7 +404,7 @@ function App() {
 
         <div className="vote-grid">
           {targets.map(p => {
-            const isSelected = pendingAction === p.id || (myRole === 'mafia' && socket.id && mafiaVotesState[socket.id] === p.id);
+            const isSelected = pendingAction === p.id || (myRole === 'mafia' && sessionId && mafiaVotesState[sessionId] === p.id);
             const votesForP = myRole === 'mafia' ? Object.values(mafiaVotesState).filter(v => v === p.id).length : 0;
             
             return (
@@ -428,7 +431,7 @@ function App() {
             <button 
               className="primary" 
               onClick={() => socket.emit('lock_vote', { roomId: gameState.roomId })}
-              disabled={!pendingAction && !(myRole === 'mafia' && socket.id && mafiaVotesState[socket.id])}
+              disabled={!pendingAction && !(myRole === 'mafia' && sessionId && mafiaVotesState[sessionId])}
             >
               Lock In Vote
             </button>
@@ -551,7 +554,7 @@ function App() {
   };
 
   return (
-    <div className="flex-center" style={{ padding: '2rem' }}>
+    <div className="flex-center" style={{ padding: '0' }}>
       
       {gameState.phase !== 'lobby' && (
         <div style={{ position: 'absolute', top: '1rem', right: '2rem', display: 'flex', gap: '1rem', alignItems: 'center', zIndex: 100 }}>

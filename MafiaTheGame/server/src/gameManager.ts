@@ -10,11 +10,12 @@ export function initGameManager(serverIo: Server) {
   io.on('connection', (socket: Socket) => {
     console.log('New client connected:', socket.id);
 
-    socket.on('create_lobby', (data: { name: string }) => {
+    socket.on('create_lobby', (data: { name: string; sessionId: string }) => {
       const roomId = generateRoomId();
       
       const newPlayer: Player = {
-        id: socket.id,
+        id: data.sessionId,
+        socketId: socket.id,
         name: data.name,
         role: null,
         isAlive: true,
@@ -23,8 +24,9 @@ export function initGameManager(serverIo: Server) {
 
       lobbies[roomId] = {
         roomId,
-        hostId: socket.id,
-        players: { [socket.id]: newPlayer },
+        hostId: data.sessionId,
+        players: { [data.sessionId]: newPlayer },
+        socketToSession: { [socket.id]: data.sessionId },
         settings: {
           numMafia: 1,
           numDoctors: 1,
@@ -49,41 +51,62 @@ export function initGameManager(serverIo: Server) {
       socket.emit('lobby_created', { roomId, gameState: lobbies[roomId] });
     });
 
-    socket.on('join_lobby', (data: { name: string; roomId: string }) => {
-      const { name, roomId } = data;
+    socket.on('join_lobby', (data: { name: string; roomId: string; sessionId: string }) => {
+      const { name, roomId, sessionId } = data;
       const lobby = lobbies[roomId.toUpperCase()];
       if (!lobby) {
         return socket.emit('error', 'Lobby not found');
       }
+
+      // Check if this is a reconnect
+      if (lobby.players[sessionId]) {
+        // Reconnecting existing player
+        lobby.players[sessionId].socketId = socket.id;
+        lobby.socketToSession[socket.id] = sessionId;
+        socket.join(lobby.roomId);
+        
+        // Let the reconnected player know their role (since it's stripped from general state)
+        if (lobby.players[sessionId].role) {
+          socket.emit('role_assigned', lobby.players[sessionId].role);
+        }
+        
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
+        return;
+      }
+
       if (lobby.phase !== 'lobby') {
         return socket.emit('error', 'Game already started');
       }
 
       const newPlayer: Player = {
-        id: socket.id,
+        id: sessionId,
+        socketId: socket.id,
         name,
         role: null,
         isAlive: true,
         isHost: false,
       };
 
-      lobby.players[socket.id] = newPlayer;
+      lobby.players[sessionId] = newPlayer;
+      lobby.socketToSession[socket.id] = sessionId;
       socket.join(lobby.roomId);
       
-      io.to(lobby.roomId).emit('game_state_update', lobby);
+      io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
     });
 
     socket.on('update_settings', (data: { roomId: string; settings: GameSettings }) => {
       const lobby = lobbies[data.roomId];
-      if (lobby && lobby.hostId === socket.id) {
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && lobby.hostId === sid) {
         lobby.settings = data.settings;
-        io.to(lobby.roomId).emit('game_state_update', lobby);
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
       }
     });
 
     socket.on('start_game', (data: { roomId: string }) => {
       const lobby = lobbies[data.roomId];
-      if (lobby && lobby.hostId === socket.id) {
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && lobby.hostId === sid) {
         startGame(lobby);
       }
     });
@@ -91,9 +114,10 @@ export function initGameManager(serverIo: Server) {
     // Handle night actions
     socket.on('mafia_vote', (data: { roomId: string; targetId: string }) => {
       const lobby = lobbies[data.roomId];
-      if (lobby && lobby.phase === 'night_mafia' && lobby.players[socket.id]?.role === 'mafia' && lobby.players[socket.id]?.isAlive) {
-        if (lobby.lockedPlayers[socket.id]) return; // Cannot change vote after locking
-        lobby.mafiaVotes[socket.id] = data.targetId;
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && sid && lobby.phase === 'night_mafia' && lobby.players[sid]?.role === 'mafia' && lobby.players[sid]?.isAlive) {
+        if (lobby.lockedPlayers[sid]) return; // Cannot change vote after locking
+        lobby.mafiaVotes[sid] = data.targetId;
         // Broadcast mafia votes to other mafias
         emitToRole(lobby, 'mafia', 'mafia_votes_update', lobby.mafiaVotes);
       }
@@ -101,31 +125,34 @@ export function initGameManager(serverIo: Server) {
 
     socket.on('doctor_save', (data: { roomId: string; targetId: string }) => {
       const lobby = lobbies[data.roomId];
-      if (lobby && lobby.phase === 'night_doctor' && lobby.players[socket.id]?.role === 'doctor' && lobby.players[socket.id]?.isAlive) {
-        if (lobby.lockedPlayers[socket.id]) return;
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && sid && lobby.phase === 'night_doctor' && lobby.players[sid]?.role === 'doctor' && lobby.players[sid]?.isAlive) {
+        if (lobby.lockedPlayers[sid]) return;
         
         // Check if doctor is trying to save the same person twice in a row
-        if (lobby.lastDoctorSaves && lobby.lastDoctorSaves[socket.id] === data.targetId) {
+        if (lobby.lastDoctorSaves && lobby.lastDoctorSaves[sid] === data.targetId) {
           return socket.emit('error', 'You cannot save the same person twice in a row.');
         }
 
-        lobby.doctorVotes[socket.id] = data.targetId;
+        lobby.doctorVotes[sid] = data.targetId;
       }
     });
 
     socket.on('sheriff_investigate', (data: { roomId: string; targetId: string }) => {
       const lobby = lobbies[data.roomId];
-      if (lobby && lobby.phase === 'night_sheriff' && lobby.players[socket.id]?.role === 'sheriff' && lobby.players[socket.id]?.isAlive) {
-        if (lobby.lockedPlayers[socket.id]) return;
-        lobby.sheriffInvestigate[socket.id] = data.targetId;
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && sid && lobby.phase === 'night_sheriff' && lobby.players[sid]?.role === 'sheriff' && lobby.players[sid]?.isAlive) {
+        if (lobby.lockedPlayers[sid]) return;
+        lobby.sheriffInvestigate[sid] = data.targetId;
       }
     });
 
     socket.on('lock_vote', (data: { roomId: string }) => {
       const lobby = lobbies[data.roomId];
-      if (!lobby || !lobby.players[socket.id]?.isAlive) return;
+      const sid = lobby?.socketToSession[socket.id];
+      if (!lobby || !sid || !lobby.players[sid]?.isAlive) return;
 
-      const myRole = lobby.players[socket.id].role;
+      const myRole = lobby.players[sid].role;
       const isMyPhase = 
         (lobby.phase === 'night_mafia' && myRole === 'mafia') ||
         (lobby.phase === 'night_doctor' && myRole === 'doctor') ||
@@ -133,10 +160,10 @@ export function initGameManager(serverIo: Server) {
 
       if (isMyPhase) {
         // Ensure they selected someone before locking
-        if (lobby.phase === 'night_mafia' && !lobby.mafiaVotes[socket.id]) return socket.emit('error', 'Select a target first.');
-        if (lobby.phase === 'night_doctor' && !lobby.doctorVotes[socket.id]) return socket.emit('error', 'Select a target first.');
+        if (lobby.phase === 'night_mafia' && !lobby.mafiaVotes[sid]) return socket.emit('error', 'Select a target first.');
+        if (lobby.phase === 'night_doctor' && !lobby.doctorVotes[sid]) return socket.emit('error', 'Select a target first.');
         if (lobby.phase === 'night_sheriff') {
-          const targetId = lobby.sheriffInvestigate[socket.id];
+          const targetId = lobby.sheriffInvestigate[sid];
           if (!targetId) return socket.emit('error', 'Select a target first.');
           
           const target = lobby.players[targetId];
@@ -144,7 +171,7 @@ export function initGameManager(serverIo: Server) {
           socket.emit('sheriff_result', { targetId, isMafia });
         }
 
-        lobby.lockedPlayers[socket.id] = true;
+        lobby.lockedPlayers[sid] = true;
         io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
 
         if (Object.keys(lobby.lockedPlayers).length >= hasAliveRoleCount(lobby, myRole as Role)) {
@@ -156,15 +183,56 @@ export function initGameManager(serverIo: Server) {
     // Handle day votes
     socket.on('day_vote', (data: { roomId: string; targetId: string }) => {
       const lobby = lobbies[data.roomId];
+      const sid = lobby?.socketToSession[socket.id];
       const phaseValid = lobby?.phase === 'day_voting' || lobby?.phase === 'day_force_vote';
-      if (lobby && phaseValid && lobby.players[socket.id]?.isAlive) {
+      if (lobby && sid && phaseValid && lobby.players[sid]?.isAlive) {
         
         if (lobby.phase === 'day_force_vote' && lobby.forceVoteTargets) {
-          if (!lobby.forceVoteTargets.includes(data.targetId)) return;
+          if (!lobby.forceVoteTargets.includes(data.targetId) && data.targetId !== 'SKIP') return;
         }
 
-        lobby.dayVotes[socket.id] = data.targetId;
-        io.to(lobby.roomId).emit('day_votes_update', lobby.dayVotes);
+        lobby.dayVotes[sid] = data.targetId;
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
+        
+        // Count votes to see if strict majority is reached
+        const voteCounts: Record<string, number> = {};
+        Object.values(lobby.dayVotes).forEach(targetId => {
+          voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        });
+
+        const aliveCount = getAlivePlayers(lobby).length;
+        const strictMajority = Math.floor(aliveCount / 2) + 1;
+        const hasMajority = Object.values(voteCounts).some(count => count >= strictMajority);
+
+        // Check if everyone alive has voted, OR if someone reached a strict mathematical majority early
+        if (Object.keys(lobby.dayVotes).length === aliveCount || hasMajority) {
+          resolveDayVote(lobby);
+        }
+      }
+    });
+
+    socket.on('play_again', (data: { roomId: string }) => {
+      const lobby = lobbies[data.roomId];
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && lobby.hostId === sid && lobby.phase === 'game_over') {
+        lobby.phase = 'lobby';
+        lobby.phaseEndTime = null;
+        lobby.lockedPlayers = {};
+        lobby.mafiaVotes = {};
+        lobby.doctorVotes = {};
+        lobby.lastDoctorSaves = {};
+        lobby.sheriffInvestigate = {};
+        lobby.dayVotes = {};
+        lobby.forceVoteTargets = null;
+        lobby.narratorMessages = [];
+        lobby.winner = null;
+
+        Object.values(lobby.players).forEach(p => {
+          p.isAlive = true;
+          p.role = null;
+        });
+
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
       }
     });
 
@@ -398,6 +466,13 @@ function resolveDayVote(lobby: GameState) {
 
   if (targetsWithMaxVotes.length === 1) {
     const killedId = targetsWithMaxVotes[0];
+    
+    if (killedId === 'SKIP') {
+      lobby.narratorMessages.push('The town voted to skip. No one is killed.');
+      startNightPhase(lobby);
+      return;
+    }
+
     lobby.players[killedId].isAlive = false;
     
     // Check Jester win

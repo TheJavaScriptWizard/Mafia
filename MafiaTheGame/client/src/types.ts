@@ -3,7 +3,8 @@ export type Role = 'mafia' | 'doctor' | 'sheriff' | 'jester' | 'villager';
 export type GamePhase = 'lobby' | 'night_mafia' | 'night_doctor' | 'night_sheriff' | 'night_jester' | 'day_deliberation' | 'day_voting' | 'day_force_vote' | 'game_over';
 
 export interface Player {
-  id: string; // Socket ID
+  id: string; // Session ID (persistent)
+  socketId: string; // Current Socket connection ID
   name: string;
   role: Role | null;
   isAlive: boolean;
@@ -24,7 +25,8 @@ export interface GameSettings {
 export interface GameState {
   roomId: string;
   hostId: string;
-  players: Record<string, Player>;
+  players: Record<string, Player>; // Keyed by session ID
+  socketToSession: Record<string, string>; // socket.id -> session ID
   settings: GameSettings;
   phase: GamePhase;
   phaseEndTime: number | null; // Timestamp when phase ends

@@ -17,9 +17,31 @@ function App() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [mafiaTeammates, setMafiaTeammates] = useState<string[]>([]);
   const [mafiaVotesState, setMafiaVotesState] = useState<Record<string, string>>({});
+  
+  const [sessionId, setSessionId] = useState<string>('');
+
+  useEffect(() => {
+    let sid = localStorage.getItem('mafia_sessionId');
+    if (!sid) {
+      sid = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('mafia_sessionId', sid);
+    }
+    setSessionId(sid);
+    
+    const savedName = localStorage.getItem('mafia_playerName');
+    const savedRoom = localStorage.getItem('mafia_roomId');
+    
+    if (savedName) setPlayerName(savedName);
+    if (savedRoom) setRoomCodeInput(savedRoom);
+    
+    if (savedName && savedRoom && sid) {
+      socket.emit('join_lobby', { name: savedName, roomId: savedRoom, sessionId: sid });
+    }
+  }, []);
 
   useEffect(() => {
     socket.on('lobby_created', (data: { roomId: string, gameState: GameState }) => {
+      localStorage.setItem('mafia_roomId', data.roomId);
       setGameState(data.gameState);
     });
 
@@ -65,9 +87,9 @@ function App() {
   }, [gameState?.phase]);
 
   const me = useMemo(() => {
-    if (!gameState || !socket.id) return null;
-    return gameState.players[socket.id] || null;
-  }, [gameState]);
+    if (!gameState || !sessionId) return null;
+    return gameState.players[sessionId] || null;
+  }, [gameState, sessionId]);
 
   // TTS Narrator Logic
   useEffect(() => {
@@ -127,13 +149,16 @@ function App() {
   const handleCreateLobby = (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName) return;
-    socket.emit('create_lobby', { name: playerName });
+    localStorage.setItem('mafia_playerName', playerName);
+    socket.emit('create_lobby', { name: playerName, sessionId });
   };
 
   const handleJoinLobby = (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName || !roomCodeInput) return;
-    socket.emit('join_lobby', { name: playerName, roomId: roomCodeInput });
+    localStorage.setItem('mafia_playerName', playerName);
+    localStorage.setItem('mafia_roomId', roomCodeInput.toUpperCase());
+    socket.emit('join_lobby', { name: playerName, roomId: roomCodeInput.toUpperCase(), sessionId });
   };
 
   if (!gameState) {
@@ -423,7 +448,7 @@ function App() {
       ? getAllPlayers().filter(p => gameState.forceVoteTargets!.includes(p.id))
       : getAlivePlayers();
 
-    const myVote = socket.id ? gameState.dayVotes[socket.id] : undefined;
+    const myVote = sessionId ? gameState.dayVotes[sessionId] : undefined;
 
     return (
       <div>
@@ -448,8 +473,15 @@ function App() {
         {renderSheriffNotebook()}
 
         <div className="vote-grid">
-          {targets.map(p => {
-            const votesForP = Object.values(gameState.dayVotes || {}).filter(v => v === p.id).length;
+          {[...targets, { id: 'SKIP', name: 'Skip Vote (No Lynch)', isAlive: true } as Player].map(p => {
+            if (!p.isAlive) return null; // Shouldn't happen but just in case
+            
+            const voters = Object.entries(gameState.dayVotes || {})
+              .filter(([_, tid]) => tid === p.id)
+              .map(([vid]) => gameState.players[vid]?.name)
+              .join(', ');
+            
+            const votesForP = Object.entries(gameState.dayVotes || {}).filter(([_, tid]) => tid === p.id).length;
             const isSelected = myVote === p.id;
             
             return (
@@ -461,6 +493,7 @@ function App() {
               >
                 {p.name}
                 <div className="vote-count">{votesForP} Votes</div>
+                {voters && <div className="voter-names">{voters}</div>}
               </button>
             );
           })}
@@ -472,7 +505,8 @@ function App() {
   const renderGameOver = () => {
     return (
       <div style={{textAlign: 'center'}}>
-        <h1 style={{fontSize: '5rem', marginBottom: '1rem'}}>
+        {/* Use vw instead of rem to prevent JESTER WINS from breaking layout on small screens */}
+        <h1 style={{fontSize: 'clamp(2.5rem, 8vw, 5rem)', marginBottom: '1rem', wordBreak: 'break-word'}}>
           {gameState.winner === 'mafia' ? <span className="title-red">MAFIA WINS</span> : 
            gameState.winner === 'town' ? <span style={{color: 'var(--accent-blue)'}}>TOWN WINS</span> :
            <span style={{color: 'var(--accent-purple)'}}>JESTER WINS</span>}
@@ -488,6 +522,14 @@ function App() {
             </div>
           ))}
         </div>
+        
+        {me?.isHost && (
+          <div style={{ marginTop: '4rem' }}>
+            <button className="primary" onClick={() => socket.emit('play_again', { roomId: gameState.roomId })}>
+              Play Again (Same Room)
+            </button>
+          </div>
+        )}
       </div>
     );
   };

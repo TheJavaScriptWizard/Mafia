@@ -200,7 +200,7 @@ export function initGameManager(serverIo: Server) {
           voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
         });
 
-        const aliveCount = getAlivePlayers(lobby).length;
+        const aliveCount = Object.values(lobby.players).filter(p => p.isAlive).length;
         const strictMajority = Math.floor(aliveCount / 2) + 1;
         const hasMajority = Object.values(voteCounts).some(count => count >= strictMajority);
 

@@ -418,11 +418,19 @@ function setNightPhase(lobby: GameState, phase: GamePhase) {
   lobby.lockedPlayers = {};
   io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
   
-  simulateBotActions(lobby);
+  const role = phase.replace('night_', '') as Role;
+  const aliveCount = hasAliveRoleCount(lobby, role);
   
-  if (phase === 'night_jester') {
-    // Jester doesn't actually do anything, just pretend for 5 seconds
-    setTimeout(() => transitionNextPhase(lobby), 5000);
+  if (aliveCount === 0 || phase === 'night_jester') {
+    // Fake out dead roles and jesters with a random 5-12s delay
+    const delay = Math.floor(Math.random() * 7000) + 5000;
+    setTimeout(() => {
+      if (lobbies[lobby.roomId]?.phase === phase) {
+        transitionNextPhase(lobby);
+      }
+    }, delay);
+  } else {
+    simulateBotActions(lobby);
   }
 }
 
@@ -442,25 +450,25 @@ function setPhase(lobby: GameState, phase: GamePhase, duration: number) {
 
 function transitionNextPhase(lobby: GameState) {
   if (lobby.phase === 'night_mafia') {
-    if (lobby.settings.numDoctors > 0 && hasAliveRoleCount(lobby, 'doctor') > 0) {
+    if (lobby.settings.numDoctors > 0) {
       setNightPhase(lobby, 'night_doctor');
-    } else if (lobby.settings.numSheriffs > 0 && hasAliveRoleCount(lobby, 'sheriff') > 0) {
+    } else if (lobby.settings.numSheriffs > 0) {
       setNightPhase(lobby, 'night_sheriff');
-    } else if (lobby.settings.numJesters > 0 && hasAliveRoleCount(lobby, 'jester') > 0) {
+    } else if (lobby.settings.numJesters > 0) {
       setNightPhase(lobby, 'night_jester');
     } else {
       resolveNight(lobby);
     }
   } else if (lobby.phase === 'night_doctor') {
-    if (lobby.settings.numSheriffs > 0 && hasAliveRoleCount(lobby, 'sheriff') > 0) {
+    if (lobby.settings.numSheriffs > 0) {
       setNightPhase(lobby, 'night_sheriff');
-    } else if (lobby.settings.numJesters > 0 && hasAliveRoleCount(lobby, 'jester') > 0) {
+    } else if (lobby.settings.numJesters > 0) {
       setNightPhase(lobby, 'night_jester');
     } else {
       resolveNight(lobby);
     }
   } else if (lobby.phase === 'night_sheriff') {
-    if (lobby.settings.numJesters > 0 && hasAliveRoleCount(lobby, 'jester') > 0) {
+    if (lobby.settings.numJesters > 0) {
       setNightPhase(lobby, 'night_jester');
     } else {
       resolveNight(lobby);
@@ -666,6 +674,7 @@ function simulateBotActions(lobby: GameState) {
   const botsToAct = Object.values(lobby.players).filter(p => p.isBot && p.isAlive && !lobby.lockedPlayers[p.id]);
   if (botsToAct.length === 0) return;
 
+  const delay = Math.floor(Math.random() * 7000) + 5000;
   setTimeout(() => {
     // If the phase has changed or game ended, do nothing
     if (!lobbies[lobby.roomId] || lobbies[lobby.roomId].phase !== lobby.phase) return;
@@ -754,5 +763,5 @@ function simulateBotActions(lobby: GameState) {
         }
       }
     }
-  }, 3000); // Wait 3 seconds to simulate thinking
+  }, delay); // Wait 5-12 seconds to simulate thinking
 }

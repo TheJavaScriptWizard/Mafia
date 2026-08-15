@@ -565,15 +565,15 @@ function App() {
     <div className="flex-center" style={{ padding: '0' }}>
       
       {gameState.phase !== 'lobby' && (
-        <div style={{ position: 'absolute', top: '1rem', right: '2rem', display: 'flex', gap: '1rem', alignItems: 'center', zIndex: 100 }}>
+        <div style={{ width: '100%', maxWidth: '900px', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'flex-end', alignItems: 'center', zIndex: 100, marginBottom: '2rem' }}>
           {me?.isHost && gameState.phase !== 'game_over' && (
-             <div style={{ display: 'flex', gap: '1rem' }}>
-               <div className="player-card host" style={{ background: 'var(--panel-bg)', backdropFilter: 'blur(10px)' }}>
+             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+               <div className="player-card host" style={{ background: 'var(--panel-bg)', backdropFilter: 'blur(10px)', flex: 1, minWidth: 'fit-content' }}>
                  Room Code: {gameState.roomId}
                </div>
                <button 
                  className="primary" 
-                 style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                 style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', flex: 1, minWidth: 'fit-content' }}
                  onClick={() => {
                    if (window.confirm("Are you sure you want to force end the game?")) {
                      socket.emit('force_end_game', { roomId: gameState.roomId });

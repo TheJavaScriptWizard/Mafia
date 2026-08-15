@@ -10,6 +10,7 @@ export interface Player {
   isAlive: boolean;
   isHost: boolean;
   connected?: boolean;
+  isBot?: boolean;
 }
 
 export interface GameSettings {
@@ -38,6 +39,7 @@ export interface GameState {
   doctorVotes: Record<string, string>; // doctorPlayerId -> targetPlayerId
   lastDoctorSaves: Record<string, string | null>; // doctorPlayerId -> last targetId
   sheriffInvestigate: Record<string, string>; // sheriffId -> targetPlayerId
+  sheriffResults: Record<string, {targetId: string, isMafia: boolean}[]>; // sheriffId -> results
   
   // Day actions state
   dayVotes: Record<string, string>; // playerId -> targetPlayerId

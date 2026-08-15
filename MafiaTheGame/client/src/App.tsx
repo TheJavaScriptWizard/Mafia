@@ -58,7 +58,10 @@ function App() {
     });
 
     socket.on('sheriff_result', (res: {targetId: string, isMafia: boolean}) => {
-      setSheriffResults(prev => [...prev, res]);
+      setSheriffResults(prev => {
+        if (prev.some(r => r.targetId === res.targetId)) return prev;
+        return [...prev, res];
+      });
     });
 
     socket.on('error', (msg: string) => {
@@ -276,16 +279,21 @@ function App() {
               </div>
               <div>
                 <label>Deliberation Timer (s): {gameState.settings.timers.deliberation}</label>
-                <input type="number" min="30" max="300" step="30" value={gameState.settings.timers.deliberation} onChange={e => updateTimer('deliberation', parseInt(e.target.value))} />
+                <input type="number" step="30" value={gameState.settings.timers.deliberation} onChange={e => updateTimer('deliberation', parseInt(e.target.value) || 0)} />
                 
                 <label>Voting Timer (s): {gameState.settings.timers.voting}</label>
-                <input type="number" min="15" max="120" step="15" value={gameState.settings.timers.voting} onChange={e => updateTimer('voting', parseInt(e.target.value))} />
+                <input type="number" step="15" value={gameState.settings.timers.voting} onChange={e => updateTimer('voting', parseInt(e.target.value) || 0)} />
               </div>
             </div>
             
-            <button className="primary" style={{ marginTop: '2rem' }} onClick={() => socket.emit('start_game', { roomId: gameState.roomId })}>
-              Start Game
-            </button>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button className="primary" style={{ marginTop: '2rem' }} onClick={() => socket.emit('start_game', { roomId: gameState.roomId })}>
+                Start Game
+              </button>
+              <button className="secondary" style={{ marginTop: '2rem' }} onClick={() => socket.emit('add_bots', { roomId: gameState.roomId })}>
+                Add Bots (Dev)
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ marginTop: '2rem', textAlign: 'center', fontStyle: 'italic', color: 'var(--text-secondary)' }}>

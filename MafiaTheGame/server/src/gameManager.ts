@@ -42,6 +42,7 @@ export function initGameManager(serverIo: Server) {
         doctorVotes: {},
         lastDoctorSaves: {},
         sheriffInvestigate: {},
+        sheriffResults: {},
         dayVotes: {},
         forceVoteTargets: null,
         narratorMessages: [],
@@ -67,9 +68,22 @@ export function initGameManager(serverIo: Server) {
         lobby.socketToSession[socket.id] = sessionId;
         socket.join(lobby.roomId);
         
-        // Let the reconnected player know their role (since it's stripped from general state)
+        // Let the reconnected player know their role and state
         if (lobby.players[sessionId].role) {
-          socket.emit('role_assigned', lobby.players[sessionId].role);
+          const role = lobby.players[sessionId].role;
+          socket.emit('role_assigned', role);
+          
+          if (role === 'mafia') {
+            const mafiaIds = Object.keys(lobby.players).filter(id => lobby.players[id].role === 'mafia');
+            socket.emit('mafia_teammates', mafiaIds);
+            socket.emit('mafia_votes_update', lobby.mafiaVotes);
+          }
+          
+          if (role === 'sheriff' && lobby.sheriffResults[sessionId]) {
+            lobby.sheriffResults[sessionId].forEach(res => {
+              socket.emit('sheriff_result', res);
+            });
+          }
         }
         
         io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
@@ -108,8 +122,8 @@ export function initGameManager(serverIo: Server) {
           numSheriffs: Math.min(3, Math.max(0, s.numSheriffs || 0)),
           numJesters: Math.min(2, Math.max(0, s.numJesters || 0)),
           timers: {
-            deliberation: Math.min(300, Math.max(15, s.timers?.deliberation || 120)),
-            voting: Math.min(120, Math.max(15, s.timers?.voting || 60))
+            deliberation: s.timers?.deliberation ?? 120,
+            voting: s.timers?.voting ?? 60
           }
         };
         io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
@@ -121,6 +135,34 @@ export function initGameManager(serverIo: Server) {
       const sid = lobby?.socketToSession[socket.id];
       if (lobby && lobby.hostId === sid) {
         startGame(lobby);
+      }
+    });
+
+    socket.on('add_bots', (data: { roomId: string }) => {
+      const lobby = lobbies[data.roomId];
+      const sid = lobby?.socketToSession[socket.id];
+      if (lobby && lobby.hostId === sid && lobby.phase === 'lobby') {
+        // Add 6 bots
+        for (let i = 1; i <= 6; i++) {
+          const botId = `BOT_${Math.random().toString(36).substring(2, 9)}`;
+          lobby.players[botId] = {
+            id: botId,
+            socketId: `socket_${botId}`, // fake socket
+            name: `Bot ${i}`,
+            role: null,
+            isAlive: true,
+            isHost: false,
+            connected: true,
+            isBot: true,
+          };
+        }
+        // Force settings
+        lobby.settings.numMafia = 1;
+        lobby.settings.numDoctors = 1;
+        lobby.settings.numSheriffs = 1;
+        lobby.settings.numJesters = 0;
+        
+        io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
       }
     });
 
@@ -181,7 +223,12 @@ export function initGameManager(serverIo: Server) {
           
           const target = lobby.players[targetId];
           const isMafia = target?.role === 'mafia';
-          socket.emit('sheriff_result', { targetId, isMafia });
+          const result = { targetId, isMafia };
+          
+          if (!lobby.sheriffResults[sid]) lobby.sheriffResults[sid] = [];
+          lobby.sheriffResults[sid].push(result);
+          
+          socket.emit('sheriff_result', result);
         }
 
         lobby.lockedPlayers[sid] = true;
@@ -235,6 +282,7 @@ export function initGameManager(serverIo: Server) {
         lobby.doctorVotes = {};
         lobby.lastDoctorSaves = {};
         lobby.sheriffInvestigate = {};
+        lobby.sheriffResults = {};
         lobby.dayVotes = {};
         lobby.forceVoteTargets = null;
         lobby.narratorMessages = [];
@@ -309,7 +357,7 @@ function startGame(lobby: GameState) {
   
   // Send each player their secret role
   Object.values(lobby.players).forEach(player => {
-    io.to(player.id).emit('role_assigned', player.role);
+    if (!player.isBot) io.to(player.socketId).emit('role_assigned', player.role);
   });
 
   startNightPhase(lobby);
@@ -336,13 +384,13 @@ function assignRoles(lobby: GameState) {
 
   players.forEach((player, index) => {
     player.role = availableRoles[index];
-    io.to(player.id).emit('role_assigned', player.role);
+    if (!player.isBot) io.to(player.socketId).emit('role_assigned', player.role);
   });
 
   // Tell mafias who the other mafias are
   const mafiaIds = players.filter(p => p.role === 'mafia').map(p => p.id);
   players.filter(p => p.role === 'mafia').forEach(p => {
-    io.to(p.id).emit('mafia_teammates', mafiaIds);
+    if (!p.isBot) io.to(p.socketId).emit('mafia_teammates', mafiaIds);
   });
 }
 
@@ -370,6 +418,8 @@ function setNightPhase(lobby: GameState, phase: GamePhase) {
   lobby.lockedPlayers = {};
   io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
   
+  simulateBotActions(lobby);
+  
   if (phase === 'night_jester') {
     // Jester doesn't actually do anything, just pretend for 5 seconds
     setTimeout(() => transitionNextPhase(lobby), 5000);
@@ -380,6 +430,8 @@ function setPhase(lobby: GameState, phase: GamePhase, duration: number) {
   lobby.phase = phase;
   lobby.phaseEndTime = Date.now() + duration * 1000;
   io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
+  
+  simulateBotActions(lobby);
 
   setTimeout(() => {
     if (lobby.phase === phase) { // Ensure phase hasn't changed manually
@@ -584,8 +636,8 @@ function endGame(lobby: GameState) {
 // Emits an event only to players with a specific role
 function emitToRole(lobby: GameState, role: Role, event: string, data: any) {
   Object.values(lobby.players).forEach(player => {
-    if (player.role === role) {
-      io.to(player.id).emit(event, data);
+    if (player.role === role && !player.isBot) {
+      io.to(player.socketId).emit(event, data);
     }
   });
 }
@@ -606,4 +658,101 @@ function getSanitizedState(lobby: GameState): Partial<GameState> {
     sanitized.sheriffInvestigate = {};
   }
   return sanitized;
+}
+
+function simulateBotActions(lobby: GameState) {
+  if (lobby.phase === 'lobby' || lobby.phase === 'game_over') return;
+  
+  const botsToAct = Object.values(lobby.players).filter(p => p.isBot && p.isAlive && !lobby.lockedPlayers[p.id]);
+  if (botsToAct.length === 0) return;
+
+  setTimeout(() => {
+    // If the phase has changed or game ended, do nothing
+    if (!lobbies[lobby.roomId] || lobbies[lobby.roomId].phase !== lobby.phase) return;
+
+    let anyoneActed = false;
+
+    botsToAct.forEach(bot => {
+      const myRole = bot.role;
+      const isMyNightPhase = 
+        (lobby.phase === 'night_mafia' && myRole === 'mafia') ||
+        (lobby.phase === 'night_doctor' && myRole === 'doctor') ||
+        (lobby.phase === 'night_sheriff' && myRole === 'sheriff');
+
+      if (isMyNightPhase) {
+        let targets = Object.values(lobby.players).filter(p => p.isAlive);
+        
+        if (myRole === 'mafia') {
+          // Mafia shouldn't vote for themselves or other mafia
+          targets = targets.filter(p => p.role !== 'mafia');
+          if (targets.length > 0) {
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            lobby.mafiaVotes[bot.id] = target.id;
+            anyoneActed = true;
+            lobby.lockedPlayers[bot.id] = true;
+          }
+        } else if (myRole === 'doctor') {
+          // Doctor shouldn't save same person twice
+          const lastSave = lobby.lastDoctorSaves?.[bot.id];
+          targets = targets.filter(p => p.id !== lastSave);
+          if (targets.length > 0) {
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            lobby.doctorVotes[bot.id] = target.id;
+            anyoneActed = true;
+            lobby.lockedPlayers[bot.id] = true;
+          }
+        } else if (myRole === 'sheriff') {
+          // Sheriff shouldn't target themselves
+          targets = targets.filter(p => p.id !== bot.id);
+          if (targets.length > 0) {
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            lobby.sheriffInvestigate[bot.id] = target.id;
+            anyoneActed = true;
+            lobby.lockedPlayers[bot.id] = true;
+            
+            // Record sheriff results for bot logic completeness, though unused by bot UI
+            if (!lobby.sheriffResults[bot.id]) lobby.sheriffResults[bot.id] = [];
+            lobby.sheriffResults[bot.id].push({ targetId: target.id, isMafia: target.role === 'mafia' });
+          }
+        }
+      } else if (lobby.phase === 'day_voting' || lobby.phase === 'day_force_vote') {
+        let targets = Object.values(lobby.players).filter(p => p.isAlive);
+        if (lobby.phase === 'day_force_vote' && lobby.forceVoteTargets) {
+          targets = targets.filter(p => lobby.forceVoteTargets!.includes(p.id));
+        }
+        
+        // Bots can occasionally skip or pick random
+        targets.push({ id: 'SKIP' } as any);
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        lobby.dayVotes[bot.id] = target.id;
+        anyoneActed = true;
+      }
+    });
+
+    if (anyoneActed) {
+      io.to(lobby.roomId).emit('game_state_update', getSanitizedState(lobby));
+      
+      // Check if we need to advance phase for night locking
+      if (lobby.phase.startsWith('night_')) {
+        const actingRole = lobby.phase.replace('night_', '') as Role;
+        if (Object.keys(lobby.lockedPlayers).length >= hasAliveRoleCount(lobby, actingRole)) {
+          transitionNextPhase(lobby);
+        }
+      } else if (lobby.phase.startsWith('day_')) {
+        // Count votes to see if strict majority is reached
+        const voteCounts: Record<string, number> = {};
+        Object.values(lobby.dayVotes).forEach(targetId => {
+          voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        });
+
+        const aliveCount = Object.values(lobby.players).filter(p => p.isAlive).length;
+        const strictMajority = Math.floor(aliveCount / 2) + 1;
+        const hasMajority = Object.values(voteCounts).some(count => count >= strictMajority);
+
+        if (Object.keys(lobby.dayVotes).length === aliveCount || hasMajority) {
+          resolveDayVote(lobby);
+        }
+      }
+    }
+  }, 3000); // Wait 3 seconds to simulate thinking
 }
